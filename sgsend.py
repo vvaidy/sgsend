@@ -86,7 +86,7 @@ def main(argv):
     global _API_KEY, _debug
     SG_FROM=getConfig('mail', 'from', 'sgsend@example.com')
     SG_SUBJECT=getConfig('mail', 'subject', 'Automated Notification from sgsend')
-    SG_BODY_TEXT="If you are seeing this, I'm sorry but something probably went wrong with sgsend. :-("
+    SG_BODY_TEXT=''
 
     ## process the command line arguments
     try:
@@ -137,7 +137,7 @@ def main(argv):
 
     if len(SG_BODY_TEXT) == 0:
         ## get it from stdin
-        SG_BODY_TEXT = sys.stdin.readlines()
+        SG_BODY_TEXT = "".join(sys.stdin.readlines())
         if _debug:
             print "Retrieving body text from stdin:", SG_BODY_TEXT
 
