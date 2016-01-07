@@ -1,0 +1,6 @@
+[auth]
+API_KEY=YOUR API KEY HERE
+[mail]
+from=devops@yourcompany.com
+subject=Automated Notification from sgsend
+
