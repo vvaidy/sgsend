@@ -73,12 +73,12 @@ Options:
          the message text is taken from stdin. Note that this is a blocking read, so you should
          use a pipe or unix redirection in batch (non-interactive) scripts.
     -s --subject:
-         Subject line of email
+         Subject line of email (default: %s)
     -f --from: 
          The FROM that the email will appear to be from (default: %s)
     -d:
-         Turns on verbose debugging messages (default: %s)
-""" % (argv[0], SG_FROM, SG_SUBJECT)
+         Turns on verbose debugging messages
+""" % (argv[0], SG_SUBJECT, SG_FROM)
 
 
 def main(argv):
