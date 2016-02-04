@@ -7,6 +7,7 @@ from ConfigParser import SafeConfigParser
 import os.path
 
 ## Global Variables
+_VERSION='20160204'
 _debug = 0
 _CONFIG_FILE_NAME = 'sgsend.cnf'
 _CONFIG = None
@@ -125,6 +126,7 @@ Are you sure you want to irretrievably overwrite it? (Y/N): """ % configFilename
         print "**ERROR** Configuration information could not be written to %s, probable cause: %s" % (configFilename, e.strerror)
 
 def usage(argv):
+    global _VERSION
     print """Usage: %s [options] TO_EMAIL [message text]
 Options:
     -m --message:
@@ -139,16 +141,18 @@ Options:
          Subject line of email (overrides config defaults)
     -f --from: 
          The FROM that the email will appear to be from (overrides config defaults)
-    --configure:
+    -c --configure:
          Interactively generates an sgsend configuration file
+    -v --version:
+         Print the Version number (%s)
     -d:
          Turns on verbose debugging messages
-""" % argv[0]
+""" % (argv[0], _VERSION)
 
 
 def main(argv):
     #set up basic variables
-    global _debug, _DEFAULT_FROM, _DEFAULT_SUBJECT, _DEFAULT_BODY_TEXT
+    global _debug, _DEFAULT_FROM, _DEFAULT_SUBJECT, _DEFAULT_BODY_TEXT, _VERSION
     ## set up code defaults
     SG_SUBJECT = _DEFAULT_SUBJECT
     SG_FROM = _DEFAULT_FROM
@@ -156,7 +160,7 @@ def main(argv):
 
     ## process the command line arguments
     try:
-        opts, args = getopt.getopt(argv[1:], "hs:f:m:d", ["help", "subject=", "from=", "message=", "configure"])
+        opts, args = getopt.getopt(argv[1:], "hs:f:m:dcv", ["help", "subject=", "from=", "message=", "configure", "version"])
     except getopt.GetoptError:
         usage(argv)
         sys.exit(2)
@@ -175,6 +179,9 @@ def main(argv):
         if opt in ("-h", "--help"):
             usage(argv)
             sys.exit(0)
+        if opt in ("-v", "--version"):
+            print "%s\nmost recent version of source code is available at http://www.github.com/vvaidy/sgsend" % _VERSION
+            sys.exit(0)
         elif opt in ("-s", "--subject"):
             SG_SUBJECT = arg
             if _debug:
@@ -187,7 +194,7 @@ def main(argv):
             SG_BODY_TEXT = arg
             if _debug:
                 print "Setting body text from command line option:", SG_BODY_TEXT
-        elif opt in ("--configure"):
+        elif opt in ("-c", "--configure"):
             if _debug:
                 print "Generating configuration file:"
             genConfig()
