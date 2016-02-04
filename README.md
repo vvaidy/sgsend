@@ -2,7 +2,9 @@
 
 SendGrid is a email service provider that supports a range of language interfaces to send email. Details at www.sendgrid.com
 
-sgsend is a simple Python utility that allows you to send email from the unix command line via the Send Grid service.
+sgsend is a simple Python utility that allows you to send email from the unix command line via the Send Grid service. Of course this is only useful if you don't already have a mail transport mechanism installed on the machine, which is the case on my Mac as well as on most of the cloud servers that I install. I find it easier to skip setting up postfix etc on my machines and use sendgrid instead.
+
+I use this on my macs and on several different Linux configurations that have Python 2.x installed. YMMV.
 
 ## Disclaimer and License
 
