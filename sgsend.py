@@ -1,8 +1,8 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 ## Simple command line utility to send mail notifications via sendgrid from the command line
 
 import sendgrid
-import sys, getopt
+import sys, getopt, re
 from ConfigParser import SafeConfigParser
 import os.path
 
@@ -10,6 +10,8 @@ import os.path
 _debug = 0
 _CONFIG_FILE_NAME = 'sgsend.cnf'
 _CONFIG = None
+_DEFAULT_FROM = 'sgsend@example.com'
+_DEFAULT_SUBJECT = 'Automated Notification from sgsend'
 
 def readConfig():
     ## retrieves the API key from one of several standard places, or returns None if not found
@@ -25,7 +27,8 @@ def readConfig():
     config_files_found = _CONFIG.read([global_config_file, user_config_file, _CONFIG_FILE_NAME])
 
     if len(config_files_found) == 0:
-        print "Could not locate config file in /etc, ~/.config/sgsend or in the current directory: ", config_file
+        if _debug:
+            print "Could not locate config file in /etc, ~/.config/sgsend or in the current directory: ", _CONFIG_FILE_NAME
         return None
 
     if _debug:
@@ -33,8 +36,23 @@ def readConfig():
 
     return _CONFIG
 
-def getAPIKey():
+def getConfig(section, option, defaultValue=None):
+    global _debug
+    config = readConfig()
 
+    if config is None or not config.has_option(section, option):
+        if _debug:
+            print "Using default value of '%s' for section '%s', option '%s'" % (defaultValue, section, option)
+        return defaultValue
+
+    theValue = config.get(section, option)
+    if _debug:
+            print "Using retrieved value of '%s' for section '%s', option '%s'" % (theValue, section, option)
+
+    return (theValue)
+
+def getAPIKey():
+    global _debug
     theKey = getConfig('auth', 'api_key')
     if theKey is None:
         print "*** ERROR *** Unable to retrieve API Key from config file. Is there an 'api_key' option in the 'auth' section?"
@@ -45,23 +63,68 @@ def getAPIKey():
 
     return (theKey)
 
-def getConfig(section, option, defaultValue=None):
-    config = readConfig()
-    if config is None or not config.has_option(section, option):
-        if _debug:
-            print "Using default value of '", defaultValue, "' for section '", section, "', option '", option, "'"
-        return defaultValue
+def genConfig():
+    global _debug
+    print("Hit ENTER to skip a particular configuration value.")
+    apiKey = ''
+    while not apiKey:
+        apiKey = raw_input("(required) API Key: ").strip()
+    fromStr = raw_input("(optional) From: ").strip()
+    subStr = raw_input("(optional) Subject: ").strip()
+    where = ''
 
-    theValue = config.get(section, option)
+    while where not in ['a', 'u', 'd']:
+        where = raw_input('Destination (enter a for all users, u for this user, d for this directory): ').strip()
+
+    fileDest = '.'
+
+    if where == 'a':
+        fileDest = os.path.join("/", "etc")
+    elif where == 'u':
+        fileDest = os.path.join(os.path.expanduser("~"), ".config", "sgsend")
+
+    config = "[auth]\nAPI_KEY=%s\n[mail]\n" % apiKey
+
+    if fromStr:
+        config += "from=" + fromStr + "\n"
+    if subStr:
+        config += "subject=" + subStr + "\n"
+
     if _debug:
-        print "Using value '", theValue, "' for option '", option, "' from section '", section, "'"
+        print"Configuration (file destination: %s)\n%s" % (fileDest, config)
 
-    return (theValue)
+    configFilename = os.path.join(fileDest, _CONFIG_FILE_NAME)
+    try:
+        if not os.path.exists(fileDest):
+            os.makedirs(fileDest)
+        if os.path.exists(configFilename):
+            yn = ''
+
+            while yn not in ['y', 'n']:
+                yn = raw_input(
+"""
+***************
+*** WARNING ***
+***************
+
+The file %s already exists.
+
+Are you sure you want to irretrievably overwrite it? (Y/N): """ % configFilename
+                ).strip().lower()
+                if yn not in ['y', 'n']:
+                    print "Please enter 'Y' or 'N'"
+
+            if yn == 'n':
+                print "OK, exiting without writing configuration file."
+                return
+        ## safe to proceed.
+        file = open(configFilename, "w")
+        file.write(config)
+        print "Configuration successfully written to '%s'" % configFilename
+    except IOError as e:
+        print "**ERROR** Configuration information could not be written to %s, probable cause: %s" % (configFilename, e.strerror)
 
 def usage(argv):
-    SG_FROM=getConfig('mail', 'from', 'sgsend@example.com')
-    SG_SUBJECT=getConfig('mail', 'subject', 'Automated Notification from sgsend')
-
     print """Usage: %s [options] TO_EMAIL [message text]
 Options:
     -m --message:
@@ -73,35 +136,45 @@ Options:
          the message text is taken from stdin. Note that this is a blocking read, so you should
          use a pipe or unix redirection in batch (non-interactive) scripts.
     -s --subject:
-         Subject line of email (default: %s)
+         Subject line of email (overrides config defaults)
     -f --from: 
-         The FROM that the email will appear to be from (default: %s)
+         The FROM that the email will appear to be from (overrides config defaults)
+    --configure:
+         Interactively generates an sgsend configuration file
     -d:
          Turns on verbose debugging messages
-""" % (argv[0], SG_SUBJECT, SG_FROM)
+""" % argv[0]
 
 
 def main(argv):
     #set up basic variables
-    global _API_KEY, _debug
-    SG_FROM=getConfig('mail', 'from', 'sgsend@example.com')
-    SG_SUBJECT=getConfig('mail', 'subject', 'Automated Notification from sgsend')
-    SG_BODY_TEXT=''
+    global _debug, _DEFAULT_FROM, _DEFAULT_SUBJECT, _DEFAULT_BODY_TEXT
+    ## set up code defaults
+    SG_SUBJECT = _DEFAULT_SUBJECT
+    SG_FROM = _DEFAULT_FROM
+    SG_BODY_TEXT = None
 
     ## process the command line arguments
     try:
-        opts, args = getopt.getopt(argv[1:], "hs:f:m:d", ["help", "subject=", "from=", "message="])
+        opts, args = getopt.getopt(argv[1:], "hs:f:m:d", ["help", "subject=", "from=", "message=", "configure"])
     except getopt.GetoptError:
         usage(argv)
         sys.exit(2)
 
+    # process the debug flag first
+    if '-d' in argv:
+        _debug = 1
+        print "Debugging messages turned ON"
+
+    ## override code defaults with config defaults
+    SG_SUBJECT=getConfig('mail', 'subject', SG_SUBJECT)
+    SG_FROM=getConfig('mail', 'from', SG_FROM)
+    ## override config defaults with command line defaults and
+    ## process other command lines while we are at it
     for opt, arg in opts:
         if opt in ("-h", "--help"):
             usage(argv)
             sys.exit(0)
-        elif opt == '-d':
-            _debug = 1
-            print "Debugging messages turned ON"
         elif opt in ("-s", "--subject"):
             SG_SUBJECT = arg
             if _debug:
@@ -114,6 +187,11 @@ def main(argv):
             SG_BODY_TEXT = arg
             if _debug:
                 print "Setting body text from command line option:", SG_BODY_TEXT
+        elif opt in ("--configure"):
+            if _debug:
+                print "Generating configuration file:"
+            genConfig()
+            sys.exit(1)
 
     ## process the other arguments
     if len(args) == 0:
@@ -121,31 +199,34 @@ def main(argv):
         usage(argv)
         sys.exit(1)
 
-    SG_TO = args[0]
-    if _debug:
-        print "TO_EMAIL is set to: ", SG_TO
+    SG_TO = args[0].strip()
 
-    if len(SG_TO) == 0:
-        print "**ERROR** Empty TO_EMAIL address"
+    if not re.match(r'[^@]+@[^@]+\.[^@]+', SG_TO):
+        print "*********\n**ERROR**\n********* TO_EMAIL address (%s) looks suspect." % SG_TO
         usage(argv)
-        sys.exit(1)
+        sys.exit(2)
 
-    if len(args) > 1:
+    if len(args) > 1 and SG_BODY_TEXT is None:
         SG_BODY_TEXT = " ".join(args[1:])
         if _debug:
             print "Retrieving body text from command line:", SG_BODY_TEXT
 
-    if len(SG_BODY_TEXT) == 0:
+    if SG_BODY_TEXT is None:
         ## get it from stdin
         SG_BODY_TEXT = "".join(sys.stdin.readlines())
         if _debug:
             print "Retrieving body text from stdin:", SG_BODY_TEXT
 
-    if len(SG_BODY_TEXT) == 0:
+    if not SG_BODY_TEXT:
         ## still 0, so give up
         usage(argv)
         sys.exit(1)
 
+    if _debug:
+        print "TO is set to: ", SG_TO
+        print "FROM is set to: ", SG_FROM
+        print "SUBJECT is set to: ", SG_SUBJECT
+        print "BODY is set to: ", SG_BODY_TEXT
 
     sg = sendgrid.SendGridClient(getAPIKey())
     
@@ -173,6 +254,8 @@ def main(argv):
         print "Status Code: ", status
         print "Status Message: ", msg
 
+    if status != 200:
+        print "**** WARNING *** Unexpected status code: %d, probable cause: %s" % (status, msg)
 
 if __name__ == "__main__":
   main(sys.argv)
